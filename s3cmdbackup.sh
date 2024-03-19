@@ -1,9 +1,16 @@
 #!/bin/bash
 
-# Backup script using s3cmd for DigitalOcean Spaces
+# Script Information
+# Name: s3cmdbackup.sh
+# Version: 0.1
+# Author: drhdev
+# Description: This script facilitates backing up files from an Ubuntu server to DigitalOcean Spaces using the s3cmd tool. It supports both 'sync' and 'copy' backup modes, HTTPS transfers, detailed logging, log rotation, and backup summaries. It is designed to be highly configurable, error-resilient, and can be automated with a cron job.
+# License: GNU Public License
+# Installation: Clone or download the script from https://github.com/drhdev/s3cmdbackup. Make the script executable with 'chmod +x s3cmdbackup.sh'. Edit the script to configure your backup settings as per your requirements.
+# Usage: Execute './s3cmdbackup.sh' to start the backup process. Refer to the script comments for detailed configuration options. For automated backups, add it to your crontab, e.g., '0 2 * * * /path/to/s3cmdbackup.sh' to run daily at 2 AM.
 
 # Configuration
-# Setting the system's hostname or provide a custom name
+# Setting the system's hostname
 HOSTNAME=$(hostname)
 
 # DigitalOcean Spaces configuration
@@ -11,13 +18,13 @@ SPACE_NAME="your_space_name"
 ACCESS_KEY="your_access_key"
 SECRET_KEY="your_secret_key"
 
-# Directory in the Space for backups
+# Directory in the DigitalOcean Space for backups
 DIRECTORY="/${HOSTNAME}_backup"
 
 # HTTPS transfer
 USE_HTTPS="yes" # Change to "no" to use HTTP
 
-# Backup type: "sync" or "copy"
+# Backup type: "sync" or "copy" - snyc copies all files to destination and deletes all files in destination which are not in source whereas copy leaves files in destination which are not in source. Both "sync" and "copy" do not copy any files from destination to source.
 BACKUP_TYPE="sync"
 
 # Paths to backup
@@ -30,15 +37,15 @@ LOG_DIR="/var/log/s3cmd_backup"
 LOG_NAME="s3cmd_backup_logfile_$(date +'%Y-%m-%d_%H-%M-%S').log"
 MAX_LOG_FILES=10
 
-# Backup message
+# Backup message (can be used for notification)
 MESSAGE_DIR="/var/log/s3cmd_backup"
 MESSAGE_NAME="s3cmd_backup_message_$(date +'%Y-%m-%d_%H-%M-%S').txt"
 MAX_MESSAGE_FILES=10
 
-# Screen output
+# Show Script Outputs on Screen (on = verbose, off = silent)
 SCREEN_OUTPUT="off"
 
-# Ensure necessary directories exist
+# Ensure necessary directories exist, otherwise create
 mkdir -p "$LOG_DIR"
 mkdir -p "$MESSAGE_DIR"
 
