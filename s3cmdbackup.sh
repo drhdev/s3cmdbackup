@@ -2,7 +2,7 @@
 
 # Script Information
 # Name: s3cmdbackup.sh
-# Version: 0.1
+# Version: 0.2
 # Author: drhdev
 # Description: This script facilitates backing up files from an Ubuntu server to DigitalOcean Spaces using the s3cmd tool. It supports both 'sync' and 'copy' backup modes, HTTPS transfers, detailed logging, log rotation, and backup summaries. It is designed to be highly configurable, error-resilient, and can be automated with a cron job.
 # License: GNU Public License
@@ -42,6 +42,10 @@ MESSAGE_DIR="/var/log/s3cmd_backup"
 MESSAGE_NAME="s3cmd_backup_message_$(date +'%Y-%m-%d_%H-%M-%S').txt"
 MAX_MESSAGE_FILES=10
 
+# Send backup message to Telegram
+# Make sure the `totelegram.sh` script is installed in /usr/local/bin with executable permissions.
+SEND_TO_TELEGRAM="off" # Change to "on" to enable sending backup messages to Telegram
+
 # Show Script Outputs on Screen (on = verbose, off = silent)
 SCREEN_OUTPUT="off"
 
@@ -57,6 +61,14 @@ rotate_files() {
     if (( ${#files[@]} > max_files )); then
         mapfile -t to_delete < <(printf '%s\n' "${files[@]}" | sort | head -n -$max_files)
         rm -f "${to_delete[@]}"
+    fi
+}
+
+# Function to send backup message to Telegram
+send_to_telegram() {
+    local message_file="$1"
+    if [[ "$SEND_TO_TELEGRAM" == "on" ]]; then
+        /usr/local/bin/totelegram.sh -message "$message_file" --verbose
     fi
 }
 
@@ -97,6 +109,9 @@ do_backup() {
         echo "Data transferred: $total_size"
         echo "Space used in directory: $space_used"
     } > "$message_file"
+
+    # Send backup message to Telegram if enabled
+    send_to_telegram "$message_file"
 
     # Rotate logs and messages
     rotate_files "$LOG_DIR" "$MAX_LOG_FILES"
