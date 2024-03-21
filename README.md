@@ -62,4 +62,3 @@ Contributions are welcome! If you have a feature request, bug report, or suggest
 ## License
 
 This project is licensed under the GNU Public License - see the LICENSE file for details.
-```
