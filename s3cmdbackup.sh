@@ -1,13 +1,13 @@
 #!/bin/bash
 
-# Script Information
 # Name: s3cmdbackup.sh
-# Version: 0.2
+# Version: 0.3
 # Author: drhdev
-# Description: This script facilitates backing up files from an Ubuntu server to DigitalOcean Spaces using the s3cmd tool. It supports both 'sync' and 'copy' backup modes, HTTPS transfers, detailed logging, log rotation, and backup summaries. It is designed to be highly configurable, error-resilient, and can be automated with a cron job.
+# Description: This script enables the backup of files from an Ubuntu server to DigitalOcean Spaces using s3cmd. It now exclusively supports 'sync' and 'sync and delete' modes to align backups more closely with user expectations for maintaining remote directories in sync with local directories. The script checks for s3cmd configuration, verifies the existence of specified Spaces and directories before proceeding, and does not create missing elements, emphasizing user control over the backup environment. It features HTTPS transfers, detailed logging, log rotation, backup summaries, and is designed for high configurability, error resilience, and automation compatibility (e.g., via cron).
 # License: GNU Public License
+# Prerequisites: Ensure 's3cmd' is installed and configured (.s3cfg in the home directory), the target Space and directory exist in DigitalOcean Spaces, and the script has been customized to your backup requirements.
 # Installation: Clone or download the script from https://github.com/drhdev/s3cmdbackup. Make the script executable with 'chmod +x s3cmdbackup.sh'. Edit the script to configure your backup settings as per your requirements.
-# Usage: Execute './s3cmdbackup.sh' to start the backup process. Refer to the script comments for detailed configuration options. For automated backups, add it to your crontab, e.g., '0 2 * * * /path/to/s3cmdbackup.sh' to run daily at 2 AM.
+# Usage: Execute './s3cmdbackup.sh' to initiate the backup process. Adjustments to backup settings and modes are documented within the script. For automated backups, add it to your crontab, e.g., '0 2 * * * /path/to/s3cmdbackup.sh', to run daily at 2 AM.
 
 # Configuration
 # Setting the system's hostname
@@ -15,22 +15,19 @@ HOSTNAME=$(hostname)
 
 # DigitalOcean Spaces configuration
 SPACE_NAME="your_space_name"
-ACCESS_KEY="your_access_key"
-SECRET_KEY="your_secret_key"
 
 # Directory in the DigitalOcean Space for backups
 DIRECTORY="/${HOSTNAME}_backup"
 
-# HTTPS transfer
-USE_HTTPS="yes" # Change to "no" to use HTTP
-
-# Backup type: "sync" or "copy" - snyc copies all files to destination and deletes all files in destination which are not in source whereas copy leaves files in destination which are not in source. Both "sync" and "copy" do not copy any files from destination to source.
-BACKUP_TYPE="sync"
+# Backup type: "sync" or "sync and delete"
+BACKUP_TYPE="sync and delete" # Default changed to "sync and delete"
 
 # Paths to backup
-INCLUDE_PATHS=("/var/www" "/home")
+INCLUDE_PATHS=()
+INCLUDE_PATHS+=("/var/www")
+INCLUDE_PATHS+=("/home")
 # Uncomment the next line to include /root in the backup
-#INCLUDE_PATHS+=("/root")
+# INCLUDE_PATHS+=("/root")
 
 # Logging
 LOG_DIR="/var/log/s3cmd_backup"
@@ -43,8 +40,7 @@ MESSAGE_NAME="s3cmd_backup_message_$(date +'%Y-%m-%d_%H-%M-%S').txt"
 MAX_MESSAGE_FILES=10
 
 # Send backup message to Telegram
-# Make sure the `totelegram.sh` script is installed in /usr/local/bin with executable permissions.
-SEND_TO_TELEGRAM="off" # Change to "on" to enable sending backup messages to Telegram
+SEND_TO_TELEGRAM="off"
 
 # Show Script Outputs on Screen (on = verbose, off = silent)
 SCREEN_OUTPUT="off"
@@ -64,7 +60,7 @@ rotate_files() {
     fi
 }
 
-# Function to send backup message to Telegram
+# Function to hand message to totelegram.sh script
 send_to_telegram() {
     local message_file="$1"
     if [[ "$SEND_TO_TELEGRAM" == "on" ]]; then
@@ -72,17 +68,43 @@ send_to_telegram() {
     fi
 }
 
+# Function to check prerequisites
+check_prerequisites() {
+    local log_file="${LOG_DIR}/${LOG_NAME}"
+
+    if ! [ -f "$HOME/.s3cfg" ]; then
+        echo "ERROR: .s3cfg configuration file not found in your home directory." | tee -a "$log_file"
+        exit 1
+    fi
+
+    if ! s3cmd ls "s3://${SPACE_NAME}" --config="$HOME/.s3cfg" &> /dev/null; then
+        echo "ERROR: Space '${SPACE_NAME}' does not exist or is not accessible. Please verify your settings." | tee -a "$log_file"
+        exit 1
+    fi
+
+    if ! s3cmd ls "s3://${SPACE_NAME}${DIRECTORY}" --config="$HOME/.s3cfg" &> /dev/null; then
+        echo "ERROR: Directory '${DIRECTORY}' does not exist in the space '${SPACE_NAME}'. Please create it before running this script." | tee -a "$log_file"
+        exit 1
+    fi
+}
+
 # Backup function
 do_backup() {
-    local paths="${INCLUDE_PATHS[*]}"
+    local paths=("${INCLUDE_PATHS[@]}")
     local log_file="${LOG_DIR}/${LOG_NAME}"
     local message_file="${MESSAGE_DIR}/${MESSAGE_NAME}"
+    local backup_cmd="sync"
 
-    # Setting up s3cmd configuration
-    s3cmd --access_key="$ACCESS_KEY" --secret_key="$SECRET_KEY" --use-https="$USE_HTTPS" \
-          --no-progress --config=".s3cfg" --logfile="$log_file" \
-          ${BACKUP_TYPE} "${paths}" "s3://${SPACE_NAME}${DIRECTORY}" > "$log_file" 2>&1
+    if [ "$BACKUP_TYPE" == "sync and delete" ]; then
+        backup_cmd="--delete-removed"
+    fi
 
+    # Check prerequisites
+    check_prerequisites
+
+    s3cmd $backup_cmd --no-progress --config="$HOME/.s3cfg" --recursive "${paths[@]/#/--include=}" --exclude='*' "s3://${SPACE_NAME}${DIRECTORY}" > "$log_file" 2>&1
+
+    # Process log and generate backup message
     # Generate backup message
     {
         echo "Backup @$HOSTNAME"
